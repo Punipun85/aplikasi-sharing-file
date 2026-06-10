@@ -30,7 +30,10 @@ class _MyFilesPageState extends State<MyFilesPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final userId = context.read<AuthProvider>().userId;
-      if (userId != null) context.read<FileProvider>().load(userId);
+      if (userId != null) {
+        context.read<FileProvider>().watch(userId);
+        context.read<FileProvider>().load(userId);
+      }
     });
   }
 

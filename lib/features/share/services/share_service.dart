@@ -38,44 +38,122 @@ class ShareService {
         createdAt: DateTime.now(),
       );
     }
-    final row = await _client
-        .from('share_links')
-        .insert({
-          'file_id': fileId,
-          'token': token,
-          'access_type': accessType,
-          'password_hash': hash,
-          'expired_at': expiredAt?.toIso8601String(),
-          'can_view': canView,
-          'can_download': canDownload,
-          'created_by': createdBy,
-        })
-        .select()
-        .single();
+    final row = await _insertShareLink(
+      fileId: fileId,
+      token: token,
+      accessType: accessType,
+      passwordHash: hash,
+      expiredAt: expiredAt,
+      createdBy: createdBy,
+      canView: canView,
+      canDownload: canDownload,
+    );
     if (recipientEmails.isNotEmpty) {
-      await _client
-          .from('share_recipients')
-          .insert(
-            recipientEmails
-                .map(
-                  (email) => {
-                    'share_link_id': row['id'],
-                    'email': email,
-                    'can_view': canView,
-                    'can_download': canDownload,
-                  },
-                )
-                .toList(),
-          );
+      await _insertRecipients(
+        shareLinkId: row['id'] as String,
+        recipientEmails: recipientEmails,
+        canView: canView,
+        canDownload: canDownload,
+      );
     }
-    await _client.from('activity_logs').insert({
-      'user_id': createdBy,
-      'file_id': fileId,
-      'action': 'create_share_link',
-      'status': 'success',
-      'platform': 'web',
-    });
+    await _logShareCreated(createdBy: createdBy, fileId: fileId);
     return ShareLink.fromMap(row);
+  }
+
+  Future<Map<String, dynamic>> _insertShareLink({
+    required String fileId,
+    required String token,
+    required String accessType,
+    required String? passwordHash,
+    required DateTime? expiredAt,
+    required String createdBy,
+    required bool canView,
+    required bool canDownload,
+  }) async {
+    final payload = {
+      'file_id': fileId,
+      'token': token,
+      'access_type': accessType,
+      'password_hash': passwordHash,
+      'expired_at': expiredAt?.toIso8601String(),
+      'can_view': canView,
+      'can_download': canDownload,
+      'created_by': createdBy,
+    };
+    try {
+      return await _client
+          .from('share_links')
+          .insert(payload)
+          .select()
+          .single();
+    } on PostgrestException catch (e) {
+      if (!_isMissingPermissionColumn(e)) {
+        rethrow;
+      }
+      final fallbackPayload = Map<String, dynamic>.from(payload)
+        ..remove('can_view')
+        ..remove('can_download');
+      return _client
+          .from('share_links')
+          .insert(fallbackPayload)
+          .select()
+          .single();
+    }
+  }
+
+  Future<void> _insertRecipients({
+    required String shareLinkId,
+    required List<String> recipientEmails,
+    required bool canView,
+    required bool canDownload,
+  }) async {
+    final rows = recipientEmails
+        .map(
+          (email) => {
+            'share_link_id': shareLinkId,
+            'email': email,
+            'can_view': canView,
+            'can_download': canDownload,
+          },
+        )
+        .toList();
+    try {
+      await _client.from('share_recipients').insert(rows);
+    } on PostgrestException catch (e) {
+      if (!_isMissingPermissionColumn(e)) {
+        rethrow;
+      }
+      final fallbackRows = rows
+          .map(
+            (row) => Map<String, dynamic>.from(row)
+              ..remove('can_view')
+              ..remove('can_download'),
+          )
+          .toList();
+      await _client.from('share_recipients').insert(fallbackRows);
+    }
+  }
+
+  Future<void> _logShareCreated({
+    required String createdBy,
+    required String fileId,
+  }) async {
+    try {
+      await _client.from('activity_logs').insert({
+        'user_id': createdBy,
+        'file_id': fileId,
+        'action': 'create_share_link',
+        'status': 'success',
+        'platform': 'web',
+      });
+    } catch (_) {
+      // Sharing must still succeed even if optional activity logging is not ready.
+    }
+  }
+
+  bool _isMissingPermissionColumn(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    return message.contains('can_view') || message.contains('can_download');
   }
 
   Future<List<SharedItem>> listCreatedBy(String userId) async {
@@ -107,6 +185,20 @@ class ShareService {
     return rows.map<SharedItem>(SharedItem.fromRecipientMap).toList();
   }
 
+  Stream<List<SharedItem>> watchMailbox({
+    required String userId,
+    required String email,
+  }) {
+    if (!SupabaseConfig.isConfigured) {
+      return Stream.value(demoSharedItems);
+    }
+    return _client
+        .from('share_recipients')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .asyncMap((_) => listMailbox(userId: userId, email: email));
+  }
+
   Future<List<ShareLink>> listForFile(String fileId) async {
     if (!SupabaseConfig.isConfigured) {
       return demoLinks.where((link) => link.fileId == fileId).toList();
@@ -119,11 +211,121 @@ class ShareService {
     return rows.map<ShareLink>((row) => ShareLink.fromMap(row)).toList();
   }
 
+  Future<ShareAccess> fetchAccess(String token) async {
+    if (!SupabaseConfig.isConfigured) {
+      final item = demoSharedItems
+          .where((shared) => shared.token == token)
+          .firstOrNull;
+      return ShareAccess(
+        token: token,
+        fileName: item?.fileName ?? 'Demo secure file',
+        fileType: item?.fileType ?? 'pdf',
+        accessType: item?.accessType ?? 'public',
+        canView: item?.canView ?? true,
+        canDownload: item?.canDownload ?? !token.contains('view-only'),
+        requiresPassword: token.contains('protected'),
+        isActive: true,
+      );
+    }
+    final response = await _client.functions.invoke(
+      'generate-download-url',
+      body: {'token': token, 'action': 'metadata'},
+    );
+    return ShareAccess.fromMap(_functionData(response.data));
+  }
+
+  Future<String> generateFileUrl({
+    required String token,
+    required String action,
+    String? password,
+  }) async {
+    if (!SupabaseConfig.isConfigured) {
+      return 'https://example.com/$token';
+    }
+    final response = await _client.functions.invoke(
+      'generate-download-url',
+      body: {'token': token, 'action': action, 'password': password},
+    );
+    final data = _functionData(response.data);
+    final signedUrl = data['signed_url'] as String?;
+    if (signedUrl == null || signedUrl.isEmpty) {
+      throw Exception(data['error'] ?? 'URL file tidak tersedia.');
+    }
+    return signedUrl;
+  }
+
+  Map<String, dynamic> _functionData(Object? data) {
+    if (data is Map<String, dynamic>) {
+      if (data['error'] != null) {
+        throw Exception(data['error']);
+      }
+      return data;
+    }
+    if (data is Map) {
+      final mapped = Map<String, dynamic>.from(data);
+      if (mapped['error'] != null) {
+        throw Exception(mapped['error']);
+      }
+      return mapped;
+    }
+    throw Exception('Response Edge Function tidak valid.');
+  }
+
   String _token() {
     const chars =
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random.secure();
-    return List.generate(36, (_) => chars[random.nextInt(chars.length)]).join();
+    final randomPart = List.generate(
+      40,
+      (_) => chars[random.nextInt(chars.length)],
+    ).join();
+    return '${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}$randomPart';
+  }
+}
+
+class ShareAccess {
+  const ShareAccess({
+    required this.token,
+    required this.fileName,
+    required this.fileType,
+    required this.accessType,
+    required this.canView,
+    required this.canDownload,
+    required this.requiresPassword,
+    required this.isActive,
+    this.fileSize,
+    this.ownerEmail,
+    this.expiredAt,
+  });
+
+  final String token;
+  final String fileName;
+  final String fileType;
+  final String accessType;
+  final bool canView;
+  final bool canDownload;
+  final bool requiresPassword;
+  final bool isActive;
+  final int? fileSize;
+  final String? ownerEmail;
+  final DateTime? expiredAt;
+
+  factory ShareAccess.fromMap(Map<String, dynamic> map) {
+    return ShareAccess(
+      token: map['token'] as String? ?? '',
+      fileName: map['file_name'] as String? ?? 'Shared file',
+      fileType: map['file_type'] as String? ?? '-',
+      accessType: map['access_type'] as String? ?? 'public',
+      canView: map['can_view'] as bool? ?? true,
+      canDownload: map['can_download'] as bool? ?? true,
+      requiresPassword: map['requires_password'] as bool? ?? false,
+      isActive: map['is_active'] as bool? ?? true,
+      fileSize: (map['file_size'] as num?)?.toInt(),
+      ownerEmail: map['owner_email'] as String?,
+      expiredAt: map['expired_at'] == null
+          ? null
+          : DateTime.tryParse(map['expired_at'] as String),
+    );
   }
 }
 

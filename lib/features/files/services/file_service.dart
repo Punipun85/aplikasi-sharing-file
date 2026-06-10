@@ -8,6 +8,23 @@ import '../models/secure_file.dart';
 class FileService {
   SupabaseClient get _client => Supabase.instance.client;
 
+  Stream<List<SecureFile>> watchFiles(String userId) {
+    if (!SupabaseConfig.isConfigured) {
+      return Stream.value(demoFiles);
+    }
+    return _client
+        .from('files')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .order('created_at', ascending: false)
+        .map(
+          (rows) => rows
+              .map<SecureFile>(SecureFile.fromMap)
+              .where((file) => file.status != 'deleted')
+              .toList(),
+        );
+  }
+
   Future<List<SecureFile>> listFiles(String userId) async {
     if (!SupabaseConfig.isConfigured) {
       return demoFiles;
@@ -21,7 +38,7 @@ class FileService {
     return rows.map<SecureFile>((row) => SecureFile.fromMap(row)).toList();
   }
 
-  Future<void> upload(String userId, PlatformFile file) async {
+  Future<SecureFile?> upload(String userId, PlatformFile file) async {
     final extension = (file.extension ?? '').toLowerCase();
     if (!AppConstants.allowedExtensions.contains(extension)) {
       throw Exception('Tipe file .$extension tidak didukung.');
@@ -30,7 +47,7 @@ class FileService {
       throw Exception('Ukuran file maksimal 50 MB.');
     }
     if (!SupabaseConfig.isConfigured) {
-      return;
+      return null;
     }
     final bytes = file.bytes;
     if (bytes == null) {
@@ -53,15 +70,20 @@ class FileService {
           'file_size': file.size,
           'status': 'private',
         })
-        .select('id')
+        .select()
         .single();
-    await _client.from('activity_logs').insert({
-      'user_id': userId,
-      'file_id': inserted['id'],
-      'action': 'upload_file',
-      'status': 'success',
-      'platform': 'web',
-    });
+    try {
+      await _client.from('activity_logs').insert({
+        'user_id': userId,
+        'file_id': inserted['id'],
+        'action': 'upload_file',
+        'status': 'success',
+        'platform': 'web',
+      });
+    } catch (_) {
+      // Upload visibility should not depend on optional activity logging.
+    }
+    return SecureFile.fromMap(inserted);
   }
 
   Future<void> rename(String fileId, String name) async {

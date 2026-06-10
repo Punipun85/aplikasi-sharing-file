@@ -4,11 +4,15 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text,
   email text,
+  avatar_url text,
   role text default 'user' check (role in ('user', 'admin')),
   status text default 'active' check (status in ('active', 'inactive')),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter table public.profiles
+add column if not exists avatar_url text;
 
 create table if not exists public.files (
   id uuid primary key default gen_random_uuid(),
@@ -124,6 +128,40 @@ returns boolean language sql stable security definer set search_path = public as
   );
 $$;
 
+create or replace function public.owns_file(target_file_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1
+    from public.files
+    where id = target_file_id
+      and user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.owns_share_link(target_share_link_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1
+    from public.share_links sl
+    join public.files f on f.id = sl.file_id
+    where sl.id = target_share_link_id
+      and (sl.created_by = auth.uid() or f.user_id = auth.uid())
+  );
+$$;
+
+create or replace function public.can_access_share_link(target_share_link_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1
+    from public.share_recipients sr
+    where sr.share_link_id = target_share_link_id
+      and (
+        sr.user_id = auth.uid()
+        or lower(sr.email) = lower(auth.email())
+      )
+  );
+$$;
+
 alter table public.profiles enable row level security;
 alter table public.files enable row level security;
 alter table public.share_links enable row level security;
@@ -196,12 +234,13 @@ drop policy if exists "share_links_select_owner_or_admin" on public.share_links;
 create policy "share_links_select_owner_or_admin" on public.share_links
 for select using (
   public.is_admin()
-  or exists (select 1 from public.files f where f.id = file_id and f.user_id = auth.uid())
-  or exists (
-    select 1
-    from public.share_recipients sr
-    where sr.share_link_id = id
-      and (sr.user_id = auth.uid() or sr.email = auth.email())
+  or created_by = auth.uid()
+  or public.owns_file(file_id)
+  or public.can_access_share_link(id)
+  or (
+    is_active = true
+    and (expired_at is null or expired_at > now())
+    and access_type in ('public', 'protected')
   )
 );
 
@@ -209,28 +248,52 @@ drop policy if exists "share_links_insert_owner" on public.share_links;
 create policy "share_links_insert_owner" on public.share_links
 for insert with check (
   created_by = auth.uid()
-  and exists (select 1 from public.files f where f.id = file_id and f.user_id = auth.uid())
+  and public.owns_file(file_id)
 );
 
 drop policy if exists "share_links_update_owner_or_admin" on public.share_links;
 create policy "share_links_update_owner_or_admin" on public.share_links
 for update using (
   public.is_admin()
-  or exists (select 1 from public.files f where f.id = file_id and f.user_id = auth.uid())
+  or public.owns_file(file_id)
+) with check (
+  public.is_admin()
+  or public.owns_file(file_id)
 );
 
 drop policy if exists "share_recipients_owner_or_admin" on public.share_recipients;
-create policy "share_recipients_owner_or_admin" on public.share_recipients
-for all using (
+
+drop policy if exists "share_recipients_select_owner_recipient_or_admin" on public.share_recipients;
+create policy "share_recipients_select_owner_recipient_or_admin" on public.share_recipients
+for select using (
   public.is_admin()
   or user_id = auth.uid()
-  or email = auth.email()
-  or exists (
-    select 1
-    from public.share_links sl
-    join public.files f on f.id = sl.file_id
-    where sl.id = share_link_id and f.user_id = auth.uid()
-  )
+  or lower(email) = lower(auth.email())
+  or public.owns_share_link(share_link_id)
+);
+
+drop policy if exists "share_recipients_insert_owner_or_admin" on public.share_recipients;
+create policy "share_recipients_insert_owner_or_admin" on public.share_recipients
+for insert with check (
+  public.is_admin()
+  or public.owns_share_link(share_link_id)
+);
+
+drop policy if exists "share_recipients_update_owner_or_admin" on public.share_recipients;
+create policy "share_recipients_update_owner_or_admin" on public.share_recipients
+for update using (
+  public.is_admin()
+  or public.owns_share_link(share_link_id)
+) with check (
+  public.is_admin()
+  or public.owns_share_link(share_link_id)
+);
+
+drop policy if exists "share_recipients_delete_owner_or_admin" on public.share_recipients;
+create policy "share_recipients_delete_owner_or_admin" on public.share_recipients
+for delete using (
+  public.is_admin()
+  or public.owns_share_link(share_link_id)
 );
 
 drop policy if exists "activity_logs_select_own_or_admin" on public.activity_logs;
@@ -244,6 +307,10 @@ for insert with check (auth.uid() is not null);
 insert into storage.buckets (id, name, public)
 values ('secure-files', 'secure-files', false)
 on conflict (id) do update set public = false;
+
+insert into storage.buckets (id, name, public)
+values ('profile-avatars', 'profile-avatars', true)
+on conflict (id) do update set public = true;
 
 drop policy if exists "secure_files_owner_upload" on storage.objects;
 create policy "secure_files_owner_upload" on storage.objects
@@ -263,6 +330,31 @@ drop policy if exists "secure_files_owner_delete" on storage.objects;
 create policy "secure_files_owner_delete" on storage.objects
 for delete using (
   bucket_id = 'secure-files'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "profile_avatars_public_read" on storage.objects;
+create policy "profile_avatars_public_read" on storage.objects
+for select using (bucket_id = 'profile-avatars');
+
+drop policy if exists "profile_avatars_owner_upload" on storage.objects;
+create policy "profile_avatars_owner_upload" on storage.objects
+for insert with check (
+  bucket_id = 'profile-avatars'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "profile_avatars_owner_update" on storage.objects;
+create policy "profile_avatars_owner_update" on storage.objects
+for update using (
+  bucket_id = 'profile-avatars'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "profile_avatars_owner_delete" on storage.objects;
+create policy "profile_avatars_owner_delete" on storage.objects
+for delete using (
+  bucket_id = 'profile-avatars'
   and auth.uid()::text = (storage.foldername(name))[1]
 );
 

@@ -46,7 +46,7 @@ class ShareProvider extends ChangeNotifier {
       await loadForFile(fileId);
       return true;
     } catch (e) {
-      error = e.toString();
+      error = _friendlyShareError(e);
       return false;
     } finally {
       isLoading = false;
@@ -83,5 +83,24 @@ class ShareProvider extends ChangeNotifier {
       isLoading = false;
       notifyListeners();
     }
+  }
+
+  String _friendlyShareError(Object error) {
+    final message = error.toString();
+    final lower = message.toLowerCase();
+    if (lower.contains('violates foreign key') ||
+        lower.contains('foreign key constraint')) {
+      return 'File belum tersimpan valid di Supabase. Upload ulang file dari akun ini, lalu buat share link lagi.';
+    }
+    if (lower.contains('row-level security') || lower.contains('rls')) {
+      return 'Akses database ditolak oleh RLS. Pastikan file ini milik akun login dan policy share_links/share_recipients sudah dijalankan.';
+    }
+    if (lower.contains('infinite recursion') || lower.contains('42p17')) {
+      return 'Policy share link di Supabase masih versi lama dan menyebabkan recursion. Jalankan ulang supabase_schema.sql terbaru di SQL Editor Supabase, lalu coba generate link lagi.';
+    }
+    if (lower.contains('can_view') || lower.contains('can_download')) {
+      return 'Kolom izin share belum ada di Supabase. Jalankan ulang schema SQL terbaru, lalu coba lagi.';
+    }
+    return message;
   }
 }

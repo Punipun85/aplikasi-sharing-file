@@ -23,10 +23,23 @@ class AppShell extends StatelessWidget {
     final mobile = Responsive.isMobile(context);
     final auth = context.watch<AuthProvider>();
     final items = auth.isAdmin ? _adminItems : _userItems;
+    final profileName = auth.profile?['name'] as String? ?? 'User';
+    final profileEmail = auth.profileEmail ?? 'Belum login';
+    final avatarUrl = auth.profile?['avatar_url'] as String?;
 
     if (mobile) {
       return Scaffold(
-        appBar: AppBar(title: Text(title), actions: actions),
+        appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title),
+              Text(profileEmail, style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+          actions: actions,
+        ),
         body: child,
         bottomNavigationBar: NavigationBar(
           selectedIndex: _selectedIndex(context, items),
@@ -75,11 +88,52 @@ class AppShell extends StatelessWidget {
                   const Spacer(),
                   Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Text(
-                      auth.profileEmail ?? 'Demo mode',
-                      style: const TextStyle(
-                        color: Color(0xFFCBD5E1),
-                        fontSize: 12,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => context.go('/profile'),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: Colors.white,
+                              backgroundImage:
+                                  avatarUrl != null && avatarUrl.isNotEmpty
+                                  ? NetworkImage(avatarUrl)
+                                  : null,
+                              child: avatarUrl == null || avatarUrl.isEmpty
+                                  ? const Icon(Icons.person_outline)
+                                  : null,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    profileName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    profileEmail,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFFCBD5E1),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -167,7 +221,6 @@ class _NavItem {
 const _userItems = [
   _NavItem('Dashboard', '/dashboard', Icons.dashboard_outlined),
   _NavItem('Files', '/files', Icons.folder_outlined),
-  _NavItem('Mailbox', '/mailbox', Icons.inbox_outlined),
   _NavItem('Open Link', '/shares', Icons.link_outlined),
   _NavItem('Activity', '/activity', Icons.history_outlined),
   _NavItem('Profile', '/profile', Icons.person_outline),

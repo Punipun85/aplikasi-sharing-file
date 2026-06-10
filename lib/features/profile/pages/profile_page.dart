@@ -15,6 +15,7 @@ class ProfilePage extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
     final files = context.watch<FileProvider>();
     final profile = auth.profile ?? {};
+    final avatarUrl = profile['avatar_url'] as String?;
     return AppShell(
       title: 'Profile',
       child: SingleChildScrollView(
@@ -25,9 +26,14 @@ class ProfilePage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const CircleAvatar(
-                  radius: 28,
-                  child: Icon(Icons.person_outline),
+                CircleAvatar(
+                  radius: 34,
+                  backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
+                      ? NetworkImage(avatarUrl)
+                      : null,
+                  child: avatarUrl == null || avatarUrl.isEmpty
+                      ? const Icon(Icons.person_outline)
+                      : null,
                 ),
                 const SizedBox(height: 18),
                 _Row(label: 'Nama', value: '${profile['name'] ?? '-'}'),

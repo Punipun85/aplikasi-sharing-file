@@ -58,6 +58,18 @@ Kamu tetap bisa override konfigurasi dengan `--dart-define`:
 flutter run -d chrome --dart-define=SUPABASE_URL=https://your-project-ref.supabase.co --dart-define=SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
 
+Untuk membuat share link memakai domain publik dan bukan `localhost`, deploy Flutter Web ke hosting terlebih dahulu lalu isi `APP_WEB_BASE_URL` saat run/build:
+
+```bash
+flutter build web --dart-define=APP_WEB_BASE_URL=https://your-secureshare-domain.com
+```
+
+Setelah itu link yang digenerate akan berbentuk:
+
+```text
+https://your-secureshare-domain.com/share/TOKEN
+```
+
 Untuk Android:
 
 ```bash

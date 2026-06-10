@@ -8,6 +8,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../files/providers/file_provider.dart';
 import '../../files/widgets/upload_file_button.dart';
 import '../../shell/app_shell.dart';
+import '../widgets/mailbox_preview.dart';
 import '../widgets/recent_activity_list.dart';
 
 class UserDashboardPage extends StatefulWidget {
@@ -23,7 +24,10 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final userId = context.read<AuthProvider>().userId;
-      if (userId != null) context.read<FileProvider>().load(userId);
+      if (userId != null) {
+        context.read<FileProvider>().watch(userId);
+        context.read<FileProvider>().load(userId);
+      }
     });
   }
 
@@ -69,6 +73,8 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
                 ),
               ],
             ),
+            const SizedBox(height: 18),
+            const MailboxPreview(),
             const SizedBox(height: 18),
             const RecentActivityList(),
           ],

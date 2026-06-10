@@ -114,6 +114,9 @@ class _SharedLinksPageState extends State<SharedLinksPage> {
 
     final uri = Uri.tryParse(input);
     if (uri != null && uri.pathSegments.isNotEmpty) {
+      if (uri.scheme == 'secureshare' && uri.host == 'share') {
+        return uri.pathSegments.first;
+      }
       final shareIndex = uri.pathSegments.indexOf('share');
       if (shareIndex >= 0 && uri.pathSegments.length > shareIndex + 1) {
         return uri.pathSegments[shareIndex + 1];

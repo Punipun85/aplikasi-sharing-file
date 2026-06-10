@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../config/supabase_config.dart';
@@ -85,39 +86,77 @@ class AuthService {
     required String userId,
     required String name,
     required String email,
+    String? avatarUrl,
   }) async {
     final client = _client;
     if (!isConfigured || client == null) {
       return;
     }
-    await client.from('profiles').upsert({
+    final payload = {
       'id': userId,
       'name': name,
       'email': email,
       'role': 'user',
       'status': 'active',
-    });
+    };
+    if (avatarUrl != null) {
+      payload['avatar_url'] = avatarUrl;
+    }
+    await client.from('profiles').upsert(payload);
   }
 
   Future<Map<String, dynamic>?> updateProfile({
     required String userId,
     required String name,
     required String email,
+    String? avatarUrl,
   }) async {
     final client = _client;
     if (!isConfigured || client == null) {
       return null;
     }
+    final payload = {
+      'name': name,
+      'email': email,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (avatarUrl != null) {
+      payload['avatar_url'] = avatarUrl;
+    }
     return client
         .from('profiles')
-        .update({
-          'name': name,
-          'email': email,
-          'updated_at': DateTime.now().toIso8601String(),
-        })
+        .update(payload)
         .eq('id', userId)
         .select()
         .maybeSingle();
+  }
+
+  Future<String> uploadAvatar({
+    required String userId,
+    required PlatformFile file,
+  }) async {
+    final client = _client;
+    if (!isConfigured || client == null) {
+      throw Exception('Supabase belum dikonfigurasi.');
+    }
+    final extension = (file.extension ?? '').toLowerCase();
+    const allowed = {'jpg', 'jpeg', 'png', 'webp'};
+    if (!allowed.contains(extension)) {
+      throw Exception('Foto profil harus JPG, PNG, atau WEBP.');
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw Exception('Ukuran foto profil maksimal 5 MB.');
+    }
+    final bytes = file.bytes;
+    if (bytes == null) {
+      throw Exception('Foto tidak dapat dibaca di platform ini.');
+    }
+
+    final safeName =
+        'avatar_${DateTime.now().millisecondsSinceEpoch}.$extension';
+    final path = '$userId/$safeName';
+    await client.storage.from('profile-avatars').uploadBinary(path, bytes);
+    return client.storage.from('profile-avatars').getPublicUrl(path);
   }
 
   Future<void> logout() async {

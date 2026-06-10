@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -22,22 +25,71 @@ import 'features/share/pages/mailbox_page.dart';
 import 'features/share/pages/shared_links_page.dart';
 import 'features/splash/pages/splash_page.dart';
 
-class SecureShareApp extends StatelessWidget {
+class SecureShareApp extends StatefulWidget {
   const SecureShareApp({super.key});
 
   @override
+  State<SecureShareApp> createState() => _SecureShareAppState();
+}
+
+class _SecureShareAppState extends State<SecureShareApp> {
+  late final GoRouter _router;
+  StreamSubscription<Uri>? _deepLinkSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _router = _routerFor(context.read<AuthProvider>());
+    _startDeepLinkListener();
+  }
+
+  @override
+  void dispose() {
+    _deepLinkSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
+    context.watch<AuthProvider>();
 
     return MaterialApp.router(
       title: 'SecureShare',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      routerConfig: _router(auth),
+      routerConfig: _router,
     );
   }
 
-  GoRouter _router(AuthProvider auth) {
+  void _startDeepLinkListener() {
+    _deepLinkSubscription ??= AppLinks().uriLinkStream.listen(_openDeepLink);
+    AppLinks().getInitialLink().then((uri) {
+      if (uri != null) {
+        _openDeepLink(uri);
+      }
+    });
+  }
+
+  void _openDeepLink(Uri uri) {
+    final token = _tokenFromUri(uri);
+    if (token == null || !mounted) {
+      return;
+    }
+    _router.go('/share/$token');
+  }
+
+  String? _tokenFromUri(Uri uri) {
+    if (uri.scheme == 'secureshare' && uri.host == 'share') {
+      return uri.pathSegments.isEmpty ? null : uri.pathSegments.first;
+    }
+    final shareIndex = uri.pathSegments.indexOf('share');
+    if (shareIndex >= 0 && uri.pathSegments.length > shareIndex + 1) {
+      return uri.pathSegments[shareIndex + 1];
+    }
+    return null;
+  }
+
+  GoRouter _routerFor(AuthProvider auth) {
     return GoRouter(
       initialLocation: '/splash',
       refreshListenable: auth,

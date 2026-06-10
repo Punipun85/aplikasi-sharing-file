@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/auth_service.dart';
@@ -79,6 +80,7 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> updateProfile({
     required String name,
     required String email,
+    String? avatarUrl,
   }) async {
     return _run(() async {
       final id = userId;
@@ -90,6 +92,7 @@ class AuthProvider extends ChangeNotifier {
           userId: id,
           name: name,
           email: email,
+          avatarUrl: avatarUrl,
         );
         profile =
             updated ??
@@ -98,6 +101,7 @@ class AuthProvider extends ChangeNotifier {
               'id': id,
               'name': name,
               'email': email,
+              'avatar_url': avatarUrl ?? profile?['avatar_url'],
               'role': profile?['role'] ?? 'user',
               'status': profile?['status'] ?? 'active',
             };
@@ -107,11 +111,34 @@ class AuthProvider extends ChangeNotifier {
           'id': id,
           'name': name,
           'email': email,
+          'avatar_url': avatarUrl ?? profile?['avatar_url'],
           'role': profile?['role'] ?? 'user',
           'status': profile?['status'] ?? 'active',
         };
       }
     });
+  }
+
+  Future<String?> uploadAvatar(PlatformFile file) async {
+    isLoading = true;
+    error = null;
+    notifyListeners();
+    try {
+      final id = userId;
+      if (id == null) {
+        throw Exception('User belum login.');
+      }
+      return await _service.uploadAvatar(userId: id, file: file);
+    } on StorageException catch (e) {
+      error = _friendlyStorageError(e.message);
+      return null;
+    } catch (e) {
+      error = e.toString();
+      return null;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> _run(Future<void> Function() action) async {
@@ -153,6 +180,18 @@ class AuthProvider extends ChangeNotifier {
     return message;
   }
 
+  String _friendlyStorageError(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('bucket not found') ||
+        lower.contains('profile-avatars')) {
+      return 'Bucket profile-avatars belum dibuat di Supabase. Jalankan SQL terbaru lalu coba upload foto lagi.';
+    }
+    if (lower.contains('row-level security') || lower.contains('policy')) {
+      return 'Upload foto ditolak oleh policy Storage. Pastikan policy bucket profile-avatars sudah dijalankan.';
+    }
+    return message;
+  }
+
   Map<String, dynamic>? _fallbackProfile() {
     final user = _service.currentUser;
     if (user == null) {
@@ -163,6 +202,7 @@ class AuthProvider extends ChangeNotifier {
       'id': user.id,
       'name': user.userMetadata?['name'] ?? email.split('@').first,
       'email': email,
+      'avatar_url': user.userMetadata?['avatar_url'],
       'role': 'user',
       'status': 'active',
     };

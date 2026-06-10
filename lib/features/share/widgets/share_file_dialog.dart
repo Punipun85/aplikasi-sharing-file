@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../config/app_constants.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../share/providers/share_provider.dart';
 
@@ -19,6 +21,7 @@ class _ShareFileDialogState extends State<ShareFileDialog> {
   String _permission = 'download';
   final _password = TextEditingController();
   final _recipients = TextEditingController();
+  String? _localError;
 
   @override
   void dispose() {
@@ -100,7 +103,14 @@ class _ShareFileDialogState extends State<ShareFileDialog> {
             ),
             if (share.latest != null) ...[
               const SizedBox(height: 16),
-              SelectableText('/share/${share.latest!.token}'),
+              _GeneratedLinks(token: share.latest!.token),
+            ],
+            if (_localError != null || share.error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _localError ?? share.error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ],
           ],
         ),
@@ -120,8 +130,22 @@ class _ShareFileDialogState extends State<ShareFileDialog> {
   }
 
   Future<void> _create() async {
+    setState(() => _localError = null);
     final userId = context.read<AuthProvider>().userId;
     if (userId == null) {
+      return;
+    }
+    final recipientEmails = _recipients.text
+        .split(',')
+        .map((email) => email.trim())
+        .where((email) => email.isNotEmpty)
+        .toList();
+    if (_accessType == 'protected' && _password.text.length < 6) {
+      setState(() => _localError = 'Password link minimal 6 karakter.');
+      return;
+    }
+    if (_accessType == 'specific_user' && recipientEmails.isEmpty) {
+      setState(() => _localError = 'Isi minimal satu email penerima.');
       return;
     }
     final expiredAt = switch (_expiry) {
@@ -138,20 +162,79 @@ class _ShareFileDialogState extends State<ShareFileDialog> {
       expiredAt: expiredAt,
       canView: true,
       canDownload: _permission == 'download',
-      recipientEmails: _recipients.text
-          .split(',')
-          .map((email) => email.trim())
-          .where((email) => email.isNotEmpty)
-          .toList(),
+      recipientEmails: recipientEmails,
     );
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            ok ? 'Share link berhasil dibuat.' : 'Gagal membuat share link.',
-          ),
-        ),
-      );
+      final message = ok
+          ? 'Share link berhasil dibuat.'
+          : context.read<ShareProvider>().error ?? 'Gagal membuat share link.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
+  }
+}
+
+class _GeneratedLinks extends StatelessWidget {
+  const _GeneratedLinks({required this.token});
+
+  final String token;
+
+  @override
+  Widget build(BuildContext context) {
+    final webLink = _webLink(token);
+    final appLink = 'secureshare://share/$token';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _CopyableLink(label: 'Web link', value: webLink),
+        const SizedBox(height: 8),
+        _CopyableLink(label: 'Android APK deep link', value: appLink),
+      ],
+    );
+  }
+
+  String _webLink(String token) {
+    final configuredBase = AppConstants.publicWebBaseUrl.trim();
+    if (configuredBase.isNotEmpty) {
+      return '${configuredBase.replaceAll(RegExp(r'/$'), '')}/share/$token';
+    }
+    final base = Uri.base;
+    if (base.scheme == 'http' || base.scheme == 'https') {
+      final port = base.hasPort ? ':${base.port}' : '';
+      return '${base.scheme}://${base.host}$port/share/$token';
+    }
+    return '/share/$token';
+  }
+}
+
+class _CopyableLink extends StatelessWidget {
+  const _CopyableLink({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: InputDecoration(labelText: label),
+      child: Row(
+        children: [
+          Expanded(child: SelectableText(value)),
+          IconButton(
+            tooltip: 'Copy link',
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: value));
+              if (context.mounted) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('$label disalin.')));
+              }
+            },
+            icon: const Icon(Icons.copy),
+          ),
+        ],
+      ),
+    );
   }
 }
