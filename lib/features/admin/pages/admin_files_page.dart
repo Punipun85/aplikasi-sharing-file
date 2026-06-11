@@ -23,10 +23,11 @@ class AdminFilesPage extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   columns: const [
-                    DataColumn(label: Text('Name')),
+                    DataColumn(label: Text('File ID')),
                     DataColumn(label: Text('Type')),
                     DataColumn(label: Text('Size')),
                     DataColumn(label: Text('Status')),
+                    DataColumn(label: Text('Risk')),
                     DataColumn(label: Text('Downloads')),
                     DataColumn(label: Text('Action')),
                   ],
@@ -34,10 +35,16 @@ class AdminFilesPage extends StatelessWidget {
                     for (final file in files)
                       DataRow(
                         cells: [
-                          DataCell(Text(file.originalName)),
+                          DataCell(Text(file.id.substring(0, 8))),
                           DataCell(Text(file.fileType)),
                           DataCell(Text(Formatters.bytes(file.fileSize))),
                           DataCell(Text(file.status)),
+                          DataCell(
+                            Chip(
+                              label: Text(file.riskStatus ?? 'unknown'),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
                           DataCell(Text('${file.downloadCount}')),
                           DataCell(
                             IconButton(
@@ -52,7 +59,7 @@ class AdminFilesPage extends StatelessWidget {
                                         ).showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                              '${file.originalName} dihapus.',
+                                              'File ${file.id.substring(0, 8)} ditandai deleted.',
                                             ),
                                           ),
                                         );

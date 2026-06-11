@@ -29,6 +29,10 @@ create table if not exists public.files (
   encryption_key text,
   encryption_nonce text,
   encryption_mac text,
+  plain_sha256 text,
+  encrypted_sha256 text,
+  risk_status text default 'unknown' check (risk_status in ('unknown', 'clean', 'suspicious', 'malicious')),
+  risk_reason text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -48,12 +52,33 @@ add column if not exists encryption_nonce text;
 alter table public.files
 add column if not exists encryption_mac text;
 
+alter table public.files
+add column if not exists plain_sha256 text;
+
+alter table public.files
+add column if not exists encrypted_sha256 text;
+
+alter table public.files
+add column if not exists risk_status text default 'unknown';
+
+alter table public.files
+add column if not exists risk_reason text;
+
+do $$
+begin
+  alter table public.files
+  add constraint files_risk_status_check
+  check (risk_status in ('unknown', 'clean', 'suspicious', 'malicious'));
+exception when duplicate_object then null;
+end $$;
+
 create table if not exists public.share_links (
   id uuid primary key default gen_random_uuid(),
   file_id uuid references public.files(id) on delete cascade not null,
   token text unique not null,
   access_type text not null check (access_type in ('public', 'protected', 'private', 'specific_user')),
   password_hash text,
+  password_delivery_token text unique,
   expired_at timestamptz,
   is_active boolean default true,
   can_view boolean default true,
@@ -78,6 +103,21 @@ add column if not exists can_view boolean default true;
 
 alter table public.share_links
 add column if not exists can_download boolean default true;
+
+alter table public.share_links
+add column if not exists password_delivery_token text;
+
+create unique index if not exists share_links_password_delivery_token_key
+on public.share_links(password_delivery_token)
+where password_delivery_token is not null;
+
+create table if not exists public.threat_signatures (
+  sha256 text primary key,
+  label text not null,
+  severity text default 'malicious' check (severity in ('suspicious', 'malicious')),
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz default now()
+);
 
 alter table public.share_recipients
 add column if not exists can_view boolean default true;
@@ -126,6 +166,33 @@ begin
 end;
 $$;
 
+create or replace function public.classify_file_risk()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  matched public.threat_signatures%rowtype;
+begin
+  select *
+  into matched
+  from public.threat_signatures
+  where sha256 in (new.plain_sha256, new.encrypted_sha256)
+  order by case severity when 'malicious' then 0 else 1 end
+  limit 1;
+
+  if found then
+    new.risk_status = matched.severity;
+    new.risk_reason = 'Matched threat signature: ' || matched.label;
+  elsif new.plain_sha256 is not null or new.encrypted_sha256 is not null then
+    new.risk_status = coalesce(new.risk_status, 'clean');
+    if new.risk_status = 'unknown' then
+      new.risk_status = 'clean';
+    end if;
+    new.risk_reason = coalesce(new.risk_reason, 'No known threat signature match');
+  end if;
+
+  return new;
+end;
+$$;
+
 drop trigger if exists touch_profiles_updated_at on public.profiles;
 create trigger touch_profiles_updated_at before update on public.profiles
 for each row execute function public.touch_updated_at();
@@ -133,6 +200,10 @@ for each row execute function public.touch_updated_at();
 drop trigger if exists touch_files_updated_at on public.files;
 create trigger touch_files_updated_at before update on public.files
 for each row execute function public.touch_updated_at();
+
+drop trigger if exists classify_file_risk_before_write on public.files;
+create trigger classify_file_risk_before_write before insert or update of plain_sha256, encrypted_sha256 on public.files
+for each row execute function public.classify_file_risk();
 
 drop trigger if exists touch_share_links_updated_at on public.share_links;
 create trigger touch_share_links_updated_at before update on public.share_links
@@ -182,10 +253,71 @@ returns boolean language sql stable security definer set search_path = public as
   );
 $$;
 
+create or replace function public.admin_list_file_audits()
+returns table (
+  id uuid,
+  user_id uuid,
+  original_name text,
+  stored_name text,
+  file_path text,
+  file_type text,
+  file_size bigint,
+  status text,
+  download_count int,
+  is_encrypted boolean,
+  encryption_algorithm text,
+  encryption_key text,
+  encryption_nonce text,
+  encryption_mac text,
+  plain_sha256 text,
+  encrypted_sha256 text,
+  risk_status text,
+  risk_reason text,
+  created_at timestamptz
+) language sql stable security definer set search_path = public as $$
+  select
+    f.id,
+    f.user_id,
+    'Confidential file'::text as original_name,
+    ''::text as stored_name,
+    ''::text as file_path,
+    f.file_type,
+    f.file_size,
+    f.status,
+    f.download_count,
+    f.is_encrypted,
+    null::text as encryption_algorithm,
+    null::text as encryption_key,
+    null::text as encryption_nonce,
+    null::text as encryption_mac,
+    null::text as plain_sha256,
+    null::text as encrypted_sha256,
+    f.risk_status,
+    f.risk_reason,
+    f.created_at
+  from public.files f
+  where public.is_admin()
+  order by f.created_at desc;
+$$;
+
+create or replace function public.admin_mark_file_deleted(target_file_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only admin can moderate files';
+  end if;
+
+  update public.files
+  set status = 'deleted', updated_at = now()
+  where id = target_file_id;
+end;
+$$;
+
 alter table public.profiles enable row level security;
 alter table public.files enable row level security;
 alter table public.share_links enable row level security;
 alter table public.share_recipients enable row level security;
+alter table public.threat_signatures enable row level security;
 alter table public.activity_logs enable row level security;
 
 do $$
@@ -235,20 +367,23 @@ create policy "profiles_admin_update" on public.profiles
 for update using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "files_select_own_or_admin" on public.files;
-create policy "files_select_own_or_admin" on public.files
-for select using (user_id = auth.uid() or public.is_admin());
+drop policy if exists "files_select_own" on public.files;
+create policy "files_select_own" on public.files
+for select using (user_id = auth.uid());
 
 drop policy if exists "files_insert_own" on public.files;
 create policy "files_insert_own" on public.files
 for insert with check (user_id = auth.uid());
 
 drop policy if exists "files_update_own_or_admin" on public.files;
-create policy "files_update_own_or_admin" on public.files
-for update using (user_id = auth.uid() or public.is_admin()) with check (user_id = auth.uid() or public.is_admin());
+drop policy if exists "files_update_own" on public.files;
+create policy "files_update_own" on public.files
+for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 drop policy if exists "files_delete_admin" on public.files;
-create policy "files_delete_admin" on public.files
-for delete using (public.is_admin());
+
+drop policy if exists "files_select_own_or_admin" on public.files;
+drop policy if exists "files_update_own_or_admin" on public.files;
 
 drop policy if exists "share_links_select_owner_or_admin" on public.share_links;
 create policy "share_links_select_owner_or_admin" on public.share_links
@@ -260,9 +395,14 @@ for select using (
   or (
     is_active = true
     and (expired_at is null or expired_at > now())
+    and auth.uid() is not null
     and access_type in ('public', 'protected')
   )
 );
+
+drop policy if exists "threat_signatures_admin_all" on public.threat_signatures;
+create policy "threat_signatures_admin_all" on public.threat_signatures
+for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "share_links_insert_owner" on public.share_links;
 create policy "share_links_insert_owner" on public.share_links

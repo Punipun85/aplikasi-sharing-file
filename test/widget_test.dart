@@ -6,7 +6,7 @@ import 'package:secureshare/features/files/providers/file_provider.dart';
 import 'package:secureshare/features/share/providers/share_provider.dart';
 
 void main() {
-  testWidgets('SecureShare boots to onboarding in demo mode', (tester) async {
+  testWidgets('SecureShare boots to login when signed out', (tester) async {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
@@ -19,6 +19,6 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    expect(find.text('SecureShare'), findsWidgets);
+    expect(find.text('Masuk ke SecureShare'), findsOneWidget);
   });
 }

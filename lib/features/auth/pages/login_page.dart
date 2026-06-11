@@ -62,7 +62,14 @@ class _LoginPageState extends State<LoginPage> {
                       _password.text,
                     );
                     if (ok && context.mounted) {
-                      context.go(auth.isAdmin ? '/admin' : '/dashboard');
+                      final next = GoRouterState.of(
+                        context,
+                      ).uri.queryParameters['next'];
+                      context.go(
+                        next == null || next.isEmpty
+                            ? (auth.isAdmin ? '/admin' : '/dashboard')
+                            : next,
+                      );
                     }
                   },
             child: auth.isLoading

@@ -14,6 +14,10 @@ class SecureFile {
     this.encryptionKey,
     this.encryptionNonce,
     this.encryptionMac,
+    this.plainSha256,
+    this.encryptedSha256,
+    this.riskStatus,
+    this.riskReason,
     required this.createdAt,
   });
 
@@ -31,6 +35,10 @@ class SecureFile {
   final String? encryptionKey;
   final String? encryptionNonce;
   final String? encryptionMac;
+  final String? plainSha256;
+  final String? encryptedSha256;
+  final String? riskStatus;
+  final String? riskReason;
   final DateTime createdAt;
 
   factory SecureFile.fromMap(Map<String, dynamic> map) {
@@ -49,6 +57,10 @@ class SecureFile {
       encryptionKey: map['encryption_key'] as String?,
       encryptionNonce: map['encryption_nonce'] as String?,
       encryptionMac: map['encryption_mac'] as String?,
+      plainSha256: map['plain_sha256'] as String?,
+      encryptedSha256: map['encrypted_sha256'] as String?,
+      riskStatus: map['risk_status'] as String?,
+      riskReason: map['risk_reason'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }

@@ -25,6 +25,7 @@ serve(async (req) => {
   );
   const { data: { user } } = await userClient.auth.getUser();
   const { token, action = 'download', password } = await req.json();
+  if (!user) return json({ error: 'Unauthorized' }, 401);
 
   const { data: link, error } = await supabase
     .from('share_links')

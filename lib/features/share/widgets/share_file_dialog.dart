@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../config/app_constants.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../share/models/share_link.dart';
 import '../../share/providers/share_provider.dart';
 
 class ShareFileDialog extends StatefulWidget {
@@ -94,7 +95,12 @@ class _ShareFileDialogState extends State<ShareFileDialog> {
               initialValue: _expiry,
               decoration: const InputDecoration(labelText: 'Expired link'),
               items: const [
+                DropdownMenuItem(value: '5m', child: Text('5 minutes')),
+                DropdownMenuItem(value: '15m', child: Text('15 minutes')),
+                DropdownMenuItem(value: '30m', child: Text('30 minutes')),
                 DropdownMenuItem(value: '1h', child: Text('1 hour')),
+                DropdownMenuItem(value: '2h', child: Text('2 hours')),
+                DropdownMenuItem(value: '12h', child: Text('12 hours')),
                 DropdownMenuItem(value: '1', child: Text('24 hours')),
                 DropdownMenuItem(value: '7', child: Text('7 days')),
                 DropdownMenuItem(value: '30', child: Text('30 days')),
@@ -103,7 +109,7 @@ class _ShareFileDialogState extends State<ShareFileDialog> {
             ),
             if (share.latest != null) ...[
               const SizedBox(height: 16),
-              _GeneratedLinks(token: share.latest!.token),
+              _GeneratedLinks(link: share.latest!),
             ],
             if (_localError != null || share.error != null) ...[
               const SizedBox(height: 12),
@@ -149,7 +155,12 @@ class _ShareFileDialogState extends State<ShareFileDialog> {
       return;
     }
     final expiredAt = switch (_expiry) {
+      '5m' => DateTime.now().add(const Duration(minutes: 5)),
+      '15m' => DateTime.now().add(const Duration(minutes: 15)),
+      '30m' => DateTime.now().add(const Duration(minutes: 30)),
       '1h' => DateTime.now().add(const Duration(hours: 1)),
+      '2h' => DateTime.now().add(const Duration(hours: 2)),
+      '12h' => DateTime.now().add(const Duration(hours: 12)),
       '1' => DateTime.now().add(const Duration(days: 1)),
       '30' => DateTime.now().add(const Duration(days: 30)),
       _ => DateTime.now().add(const Duration(days: 7)),
@@ -176,20 +187,33 @@ class _ShareFileDialogState extends State<ShareFileDialog> {
 }
 
 class _GeneratedLinks extends StatelessWidget {
-  const _GeneratedLinks({required this.token});
+  const _GeneratedLinks({required this.link});
 
-  final String token;
+  final ShareLink link;
 
   @override
   Widget build(BuildContext context) {
-    final webLink = _webLink(token);
-    final appLink = 'secureshare://share/$token';
+    final webLink = _webLink(link.token);
+    final appLink = 'secureshare://share/${link.token}';
+    final passwordToken = link.passwordDeliveryToken;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _CopyableLink(label: 'Web link', value: webLink),
         const SizedBox(height: 8),
         _CopyableLink(label: 'Android APK deep link', value: appLink),
+        if (passwordToken != null && passwordToken.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _CopyableLink(
+            label: 'Protected delivery token',
+            value: passwordToken,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Kirim token ini lewat channel berbeda dari password untuk membantu verifikasi link protected.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ],
     );
   }

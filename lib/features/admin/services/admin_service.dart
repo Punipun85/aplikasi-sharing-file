@@ -21,15 +21,15 @@ class AdminService {
         .map((rows) => rows.map<AdminUser>(AdminUser.fromMap).toList());
   }
 
-  Stream<List<SecureFile>> watchFiles() {
+  Stream<List<SecureFile>> watchFiles() async* {
     if (!SupabaseConfig.isConfigured) {
-      return Stream.value(demoFiles);
+      yield demoFiles;
+      return;
     }
-    return _client
-        .from('files')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false)
-        .map((rows) => rows.map<SecureFile>(SecureFile.fromMap).toList());
+    yield await _listFileAudits();
+    await for (final _ in Stream.periodic(const Duration(seconds: 8))) {
+      yield await _listFileAudits();
+    }
   }
 
   Stream<List<ActivityLog>> watchLogs() {
@@ -54,7 +54,19 @@ class AdminService {
     if (!SupabaseConfig.isConfigured) {
       return;
     }
-    await _client.from('files').update({'status': 'deleted'}).eq('id', fileId);
+    await _client.rpc(
+      'admin_mark_file_deleted',
+      params: {'target_file_id': fileId},
+    );
+  }
+
+  Future<List<SecureFile>> _listFileAudits() async {
+    final rows = await _client.rpc('admin_list_file_audits');
+    return (rows as List)
+        .map<SecureFile>(
+          (row) => SecureFile.fromMap(Map<String, dynamic>.from(row as Map)),
+        )
+        .toList();
   }
 }
 

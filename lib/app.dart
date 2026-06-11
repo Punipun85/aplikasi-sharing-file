@@ -17,7 +17,6 @@ import 'features/auth/providers/auth_provider.dart';
 import 'features/dashboard/pages/user_dashboard_page.dart';
 import 'features/files/pages/file_detail_page.dart';
 import 'features/files/pages/my_files_page.dart';
-import 'features/onboarding/pages/onboarding_page.dart';
 import 'features/profile/pages/edit_profile_page.dart';
 import 'features/profile/pages/profile_page.dart';
 import 'features/share/pages/download_share_page.dart';
@@ -97,21 +96,18 @@ class _SecureShareAppState extends State<SecureShareApp> {
         final location = state.matchedLocation;
         final isPublic =
             location == '/splash' ||
-            location == '/onboarding' ||
             location == '/login' ||
-            location == '/register' ||
-            location.startsWith('/share/');
+            location == '/register';
 
         if (auth.isBootstrapping) {
           return location == '/splash' ? null : '/splash';
         }
         if (!auth.isAuthenticated && !isPublic) {
-          return '/login';
+          final next = Uri.encodeComponent(state.uri.toString());
+          return '/login?next=$next';
         }
         if (auth.isAuthenticated &&
-            (location == '/login' ||
-                location == '/register' ||
-                location == '/onboarding')) {
+            (location == '/login' || location == '/register')) {
           return auth.isAdmin ? '/admin' : '/dashboard';
         }
         if (location.startsWith('/admin') && !auth.isAdmin) {
@@ -120,13 +116,12 @@ class _SecureShareAppState extends State<SecureShareApp> {
         if (location == '/splash') {
           return auth.isAuthenticated
               ? (auth.isAdmin ? '/admin' : '/dashboard')
-              : '/onboarding';
+              : '/login';
         }
         return null;
       },
       routes: [
         GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
-        GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingPage()),
         GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
         GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
         GoRoute(

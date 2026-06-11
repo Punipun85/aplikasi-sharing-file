@@ -30,12 +30,14 @@ class ShareService {
     final hash = password == null || password.isEmpty
         ? null
         : sha256.convert(utf8.encode(password)).toString();
+    final passwordDeliveryToken = accessType == 'protected' ? _token() : null;
     if (!SupabaseConfig.isConfigured) {
       return ShareLink(
         id: 'demo-link',
         fileId: fileId,
         token: token,
         accessType: accessType,
+        passwordDeliveryToken: passwordDeliveryToken,
         expiredAt: expiredAt,
         isActive: true,
         canView: canView,
@@ -48,6 +50,7 @@ class ShareService {
       token: token,
       accessType: accessType,
       passwordHash: hash,
+      passwordDeliveryToken: passwordDeliveryToken,
       expiredAt: expiredAt,
       createdBy: createdBy,
       canView: canView,
@@ -70,6 +73,7 @@ class ShareService {
     required String token,
     required String accessType,
     required String? passwordHash,
+    required String? passwordDeliveryToken,
     required DateTime? expiredAt,
     required String createdBy,
     required bool canView,
@@ -80,6 +84,7 @@ class ShareService {
       'token': token,
       'access_type': accessType,
       'password_hash': passwordHash,
+      'password_delivery_token': passwordDeliveryToken,
       'expired_at': expiredAt?.toIso8601String(),
       'can_view': canView,
       'can_download': canDownload,
@@ -399,6 +404,7 @@ final demoLinks = [
     fileId: 'f1',
     token: 'demo-public-link',
     accessType: 'public',
+    passwordDeliveryToken: null,
     expiredAt: DateTime.now().add(const Duration(days: 7)),
     isActive: true,
     canView: true,

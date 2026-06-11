@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:universal_html/html.dart' as html;
@@ -61,7 +62,9 @@ class FileService {
       throw Exception('File tidak dapat dibaca di platform ini.');
     }
 
+    final plainSha256 = sha256.convert(bytes).toString();
     final encrypted = await _encryption.encrypt(bytes);
+    final encryptedSha256 = sha256.convert(encrypted.cipherBytes).toString();
     final storedName =
         '${DateTime.now().millisecondsSinceEpoch}_${file.name}.enc';
     final path = '$userId/$storedName';
@@ -83,6 +86,8 @@ class FileService {
           'encryption_key': encrypted.keyBase64,
           'encryption_nonce': encrypted.nonceBase64,
           'encryption_mac': encrypted.macBase64,
+          'plain_sha256': plainSha256,
+          'encrypted_sha256': encryptedSha256,
         })
         .select()
         .single();
@@ -222,6 +227,7 @@ final demoFiles = [
     downloadCount: 12,
     isEncrypted: true,
     encryptionAlgorithm: FileEncryptionService.algorithmName,
+    riskStatus: 'clean',
     createdAt: DateTime.now().subtract(const Duration(hours: 4)),
   ),
   SecureFile(
@@ -236,6 +242,7 @@ final demoFiles = [
     downloadCount: 3,
     isEncrypted: true,
     encryptionAlgorithm: FileEncryptionService.algorithmName,
+    riskStatus: 'clean',
     createdAt: DateTime.now().subtract(const Duration(days: 1)),
   ),
   SecureFile(
@@ -250,6 +257,7 @@ final demoFiles = [
     downloadCount: 28,
     isEncrypted: true,
     encryptionAlgorithm: FileEncryptionService.algorithmName,
+    riskStatus: 'clean',
     createdAt: DateTime.now().subtract(const Duration(days: 3)),
   ),
 ];

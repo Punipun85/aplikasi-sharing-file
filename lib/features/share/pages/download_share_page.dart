@@ -95,7 +95,7 @@ class _DownloadSharePageState extends State<DownloadSharePage> {
     }
     final auth = context.read<AuthProvider>();
     if (!auth.isAuthenticated) {
-      context.go('/onboarding');
+      context.go('/login');
       return;
     }
     context.go(auth.isAdmin ? '/admin' : '/dashboard');

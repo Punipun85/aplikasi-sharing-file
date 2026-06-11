@@ -4,6 +4,7 @@ class ShareLink {
     required this.fileId,
     required this.token,
     required this.accessType,
+    this.passwordDeliveryToken,
     this.expiredAt,
     required this.isActive,
     required this.canView,
@@ -15,6 +16,7 @@ class ShareLink {
   final String fileId;
   final String token;
   final String accessType;
+  final String? passwordDeliveryToken;
   final DateTime? expiredAt;
   final bool isActive;
   final bool canView;
@@ -27,6 +29,7 @@ class ShareLink {
       fileId: map['file_id'] as String,
       token: map['token'] as String,
       accessType: map['access_type'] as String,
+      passwordDeliveryToken: map['password_delivery_token'] as String?,
       expiredAt: map['expired_at'] == null
           ? null
           : DateTime.parse(map['expired_at'] as String),
