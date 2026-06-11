@@ -9,6 +9,11 @@ class SecureFile {
     required this.fileSize,
     required this.status,
     required this.downloadCount,
+    required this.isEncrypted,
+    this.encryptionAlgorithm,
+    this.encryptionKey,
+    this.encryptionNonce,
+    this.encryptionMac,
     required this.createdAt,
   });
 
@@ -21,6 +26,11 @@ class SecureFile {
   final int fileSize;
   final String status;
   final int downloadCount;
+  final bool isEncrypted;
+  final String? encryptionAlgorithm;
+  final String? encryptionKey;
+  final String? encryptionNonce;
+  final String? encryptionMac;
   final DateTime createdAt;
 
   factory SecureFile.fromMap(Map<String, dynamic> map) {
@@ -34,6 +44,11 @@ class SecureFile {
       fileSize: (map['file_size'] as num).toInt(),
       status: map['status'] as String? ?? 'private',
       downloadCount: (map['download_count'] as num?)?.toInt() ?? 0,
+      isEncrypted: map['is_encrypted'] as bool? ?? false,
+      encryptionAlgorithm: map['encryption_algorithm'] as String?,
+      encryptionKey: map['encryption_key'] as String?,
+      encryptionNonce: map['encryption_nonce'] as String?,
+      encryptionMac: map['encryption_mac'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }

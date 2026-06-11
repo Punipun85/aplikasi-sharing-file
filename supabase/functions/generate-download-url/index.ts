@@ -46,7 +46,12 @@ serve(async (req) => {
         file_size,
         file_path,
         status,
-        download_count
+        download_count,
+        is_encrypted,
+        encryption_algorithm,
+        encryption_key,
+        encryption_nonce,
+        encryption_mac
       )
     `)
     .eq('token', token)
@@ -85,6 +90,8 @@ serve(async (req) => {
     requires_password: link.access_type === 'protected',
     is_active: link.is_active,
     expired_at: link.expired_at,
+    is_encrypted: file.is_encrypted ?? false,
+    encryption_algorithm: file.encryption_algorithm ?? null,
   };
 
   if (action === 'metadata') return json(metadata);
@@ -115,7 +122,13 @@ serve(async (req) => {
     await logActivity(supabase, user?.id ?? null, link.file_id, 'download_file', 'success');
   }
 
-  return json({ ...metadata, signed_url: signed.signedUrl });
+  return json({
+    ...metadata,
+    signed_url: signed.signedUrl,
+    encryption_key: file.encryption_key ?? null,
+    encryption_nonce: file.encryption_nonce ?? null,
+    encryption_mac: file.encryption_mac ?? null,
+  });
 });
 
 async function validateAccess(supabase: ReturnType<typeof createClient>, link: any, file: any, user: any) {

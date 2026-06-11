@@ -1,15 +1,20 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:universal_html/html.dart' as html;
 
 import '../../../config/supabase_config.dart';
+import '../../../core/security/file_encryption_service.dart';
 import '../models/share_link.dart';
 import '../models/shared_item.dart';
 
 class ShareService {
   SupabaseClient get _client => Supabase.instance.client;
+  final _encryption = FileEncryptionService();
 
   Future<ShareLink> create({
     required String fileId,
@@ -251,7 +256,10 @@ class ShareService {
     if (signedUrl == null || signedUrl.isEmpty) {
       throw Exception(data['error'] ?? 'URL file tidak tersedia.');
     }
-    return signedUrl;
+    if (data['is_encrypted'] != true) {
+      return signedUrl;
+    }
+    return _decryptToObjectUrl(data, signedUrl, action);
   }
 
   Map<String, dynamic> _functionData(Object? data) {
@@ -269,6 +277,62 @@ class ShareService {
       return mapped;
     }
     throw Exception('Response Edge Function tidak valid.');
+  }
+
+  Future<String> _decryptToObjectUrl(
+    Map<String, dynamic> data,
+    String signedUrl,
+    String action,
+  ) async {
+    final key = data['encryption_key'] as String?;
+    final nonce = data['encryption_nonce'] as String?;
+    final mac = data['encryption_mac'] as String?;
+    if (key == null || nonce == null || mac == null) {
+      throw Exception('Metadata enkripsi file tidak lengkap.');
+    }
+    final response = await http.get(Uri.parse(signedUrl));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('File terenkripsi gagal diambil dari storage.');
+    }
+    final plainBytes = await _encryption.decrypt(
+      cipherBytes: Uint8List.fromList(response.bodyBytes),
+      keyBase64: key,
+      nonceBase64: nonce,
+      macBase64: mac,
+    );
+    final fileName = data['file_name'] as String? ?? 'secure-file';
+    final fileType = data['file_type'] as String? ?? 'octet-stream';
+    final blob = html.Blob([plainBytes], _mimeType(fileType));
+    final objectUrl = html.Url.createObjectUrlFromBlob(blob);
+    if (action == 'download') {
+      final anchor = html.AnchorElement(href: objectUrl)
+        ..download = fileName
+        ..target = '_blank';
+      anchor.click();
+    } else {
+      html.window.open(objectUrl, '_blank');
+    }
+    return objectUrl;
+  }
+
+  String _mimeType(String extension) {
+    return switch (extension.toLowerCase()) {
+      'pdf' => 'application/pdf',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'txt' => 'text/plain',
+      'zip' => 'application/zip',
+      'doc' => 'application/msword',
+      'docx' =>
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls' => 'application/vnd.ms-excel',
+      'xlsx' =>
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'ppt' => 'application/vnd.ms-powerpoint',
+      'pptx' =>
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      _ => 'application/octet-stream',
+    };
   }
 
   String _token() {

@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:universal_html/html.dart' as html;
 
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/empty_state.dart';
@@ -7,6 +10,7 @@ import '../../share/providers/share_provider.dart';
 import '../../share/widgets/share_file_dialog.dart';
 import '../../shell/app_shell.dart';
 import '../providers/file_provider.dart';
+import '../services/file_service.dart';
 
 class FileDetailPage extends StatefulWidget {
   const FileDetailPage({super.key, required this.fileId});
@@ -18,6 +22,8 @@ class FileDetailPage extends StatefulWidget {
 }
 
 class _FileDetailPageState extends State<FileDetailPage> {
+  Future<FilePreviewData>? _previewFuture;
+
   @override
   void initState() {
     super.initState();
@@ -85,6 +91,16 @@ class _FileDetailPageState extends State<FileDetailPage> {
               ),
             ),
             const SizedBox(height: 16),
+            _PreviewCard(
+              fileType: file.fileType,
+              previewFuture: _previewFuture,
+              onLoadPreview: () {
+                setState(() {
+                  _previewFuture = context.read<FileProvider>().preview(file);
+                });
+              },
+            ),
+            const SizedBox(height: 16),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -115,6 +131,151 @@ class _FileDetailPageState extends State<FileDetailPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PreviewCard extends StatelessWidget {
+  const _PreviewCard({
+    required this.fileType,
+    required this.previewFuture,
+    required this.onLoadPreview,
+  });
+
+  final String fileType;
+  final Future<FilePreviewData>? previewFuture;
+  final VoidCallback onLoadPreview;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Preview File',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onLoadPreview,
+                  icon: const Icon(Icons.visibility_outlined),
+                  label: Text(
+                    previewFuture == null ? 'Load Preview' : 'Reload',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (previewFuture == null)
+              const Text(
+                'Klik Load Preview untuk membuka file milikmu. File terenkripsi akan didekripsi di aplikasi sebelum ditampilkan.',
+              )
+            else
+              FutureBuilder<FilePreviewData>(
+                future: previewFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return Text(
+                      _friendlyPreviewError(snapshot.error),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                  }
+                  final preview = snapshot.data;
+                  if (preview == null) {
+                    return const Text('Preview tidak tersedia.');
+                  }
+                  return _PreviewContent(preview: preview, fileType: fileType);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _friendlyPreviewError(Object? error) {
+    final message = error.toString();
+    final lower = message.toLowerCase();
+    if (lower.contains('row-level security') ||
+        lower.contains('unauthorized')) {
+      return 'Preview ditolak oleh policy Storage. Pastikan policy read owner untuk bucket secure-files sudah dijalankan.';
+    }
+    if (lower.contains('metadata enkripsi')) {
+      return 'Metadata enkripsi file belum lengkap. Upload ulang file agar bisa dipreview.';
+    }
+    return message.replaceFirst('Exception: ', '');
+  }
+}
+
+class _PreviewContent extends StatelessWidget {
+  const _PreviewContent({required this.preview, required this.fileType});
+
+  final FilePreviewData preview;
+  final String fileType;
+
+  @override
+  Widget build(BuildContext context) {
+    final lower = fileType.toLowerCase();
+    if ({'jpg', 'jpeg', 'png'}.contains(lower)) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Image.memory(
+          preview.bytes,
+          height: 360,
+          width: double.infinity,
+          fit: BoxFit.contain,
+        ),
+      );
+    }
+    if (lower == 'txt') {
+      return Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(maxHeight: 360),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: SingleChildScrollView(
+          child: SelectableText(
+            utf8.decode(preview.bytes, allowMalformed: true),
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          lower == 'pdf'
+              ? 'PDF sudah didekripsi. Buka preview di tab baru.'
+              : 'File sudah didekripsi. Tipe ini belum punya preview inline, tetapi bisa dibuka di tab baru.',
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: preview.objectUrl == null
+              ? null
+              : () => html.window.open(preview.objectUrl!, '_blank'),
+          icon: const Icon(Icons.open_in_new),
+          label: const Text('Buka Preview'),
+        ),
+      ],
     );
   }
 }

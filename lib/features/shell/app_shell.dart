@@ -30,6 +30,13 @@ class AppShell extends StatelessWidget {
     if (mobile) {
       return Scaffold(
         appBar: AppBar(
+          leading: _showBackButton(context, items)
+              ? IconButton(
+                  tooltip: 'Kembali',
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => _goBack(context, auth),
+                )
+              : null,
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -177,6 +184,32 @@ class AppShell extends StatelessWidget {
         .toList()
         .indexWhere((item) => item.path == path);
     return index < 0 ? 0 : index;
+  }
+
+  bool _showBackButton(BuildContext context, List<_NavItem> items) {
+    final path = GoRouterState.of(context).uri.path;
+    return !items.any((item) => item.path == path);
+  }
+
+  void _goBack(BuildContext context, AuthProvider auth) {
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    final path = GoRouterState.of(context).uri.path;
+    if (path.startsWith('/files/')) {
+      context.go('/files');
+      return;
+    }
+    if (path.startsWith('/profile/')) {
+      context.go('/profile');
+      return;
+    }
+    if (path.startsWith('/admin/')) {
+      context.go('/admin');
+      return;
+    }
+    context.go(auth.isAdmin ? '/admin' : '/dashboard');
   }
 }
 

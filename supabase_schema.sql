@@ -24,9 +24,29 @@ create table if not exists public.files (
   file_size bigint not null check (file_size > 0),
   status text default 'private' check (status in ('private', 'shared', 'deleted')),
   download_count int default 0 check (download_count >= 0),
+  is_encrypted boolean default false,
+  encryption_algorithm text default 'AES-256-GCM',
+  encryption_key text,
+  encryption_nonce text,
+  encryption_mac text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter table public.files
+add column if not exists is_encrypted boolean default false;
+
+alter table public.files
+add column if not exists encryption_algorithm text default 'AES-256-GCM';
+
+alter table public.files
+add column if not exists encryption_key text;
+
+alter table public.files
+add column if not exists encryption_nonce text;
+
+alter table public.files
+add column if not exists encryption_mac text;
 
 create table if not exists public.share_links (
   id uuid primary key default gen_random_uuid(),
@@ -315,6 +335,13 @@ on conflict (id) do update set public = true;
 drop policy if exists "secure_files_owner_upload" on storage.objects;
 create policy "secure_files_owner_upload" on storage.objects
 for insert with check (
+  bucket_id = 'secure-files'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "secure_files_owner_read" on storage.objects;
+create policy "secure_files_owner_read" on storage.objects
+for select using (
   bucket_id = 'secure-files'
   and auth.uid()::text = (storage.foldername(name))[1]
 );

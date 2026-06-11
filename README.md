@@ -99,6 +99,8 @@ supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ## Catatan Keamanan
 
 - Bucket `secure-files` private, file tidak dibuka langsung dari public URL.
+- Upload baru dienkripsi di sisi aplikasi memakai AES-256-GCM sebelum masuk Supabase Storage. Object di bucket tersimpan sebagai ciphertext dengan suffix `.enc`.
+- Metadata decrypt hanya dikirim oleh Edge Function setelah token, expiry, access type, dan izin view/download valid.
 - Download produksi harus lewat `generate-download-url` agar token, expiry, access type, status file, dan penerima divalidasi.
 - Password share link di-hash di Edge Function memakai bcrypt.
 - RLS membatasi user hanya pada profile, file, share link, dan activity miliknya.

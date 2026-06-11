@@ -73,6 +73,10 @@ class FileProvider extends ChangeNotifier {
   SecureFile? byId(String id) =>
       files.where((file) => file.id == id).firstOrNull;
 
+  Future<FilePreviewData> preview(SecureFile file) {
+    return _service.preview(file);
+  }
+
   @override
   void dispose() {
     _filesSubscription?.cancel();

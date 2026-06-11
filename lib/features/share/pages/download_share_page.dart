@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../services/share_service.dart';
 
 class DownloadSharePage extends StatefulWidget {
@@ -36,6 +39,14 @@ class _DownloadSharePageState extends State<DownloadSharePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Keluar',
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => _leavePage(context),
+        ),
+        title: const Text('Shared File'),
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -77,6 +88,19 @@ class _DownloadSharePageState extends State<DownloadSharePage> {
     );
   }
 
+  void _leavePage(BuildContext context) {
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    final auth = context.read<AuthProvider>();
+    if (!auth.isAuthenticated) {
+      context.go('/onboarding');
+      return;
+    }
+    context.go(auth.isAdmin ? '/admin' : '/dashboard');
+  }
+
   Future<void> _open(ShareAccess access, String action) async {
     setState(() {
       _isOpening = true;
@@ -91,6 +115,9 @@ class _DownloadSharePageState extends State<DownloadSharePage> {
         action: action,
         password: access.requiresPassword ? _password.text.trim() : null,
       );
+      if (url.startsWith('blob:')) {
+        return;
+      }
       final opened = await launchUrl(
         Uri.parse(url),
         mode: LaunchMode.externalApplication,
