@@ -76,7 +76,7 @@ create table if not exists public.share_links (
   id uuid primary key default gen_random_uuid(),
   file_id uuid references public.files(id) on delete cascade not null,
   token text unique not null,
-  access_type text not null check (access_type in ('public', 'protected', 'private', 'specific_user')),
+  access_type text not null check (access_type in ('public', 'protected', 'specific_user')),
   password_hash text,
   password_delivery_token text unique,
   expired_at timestamptz,
@@ -118,6 +118,21 @@ create table if not exists public.threat_signatures (
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
+
+do $$
+begin
+  alter table public.share_links
+  drop constraint if exists share_links_access_type_check;
+
+  update public.share_links
+  set access_type = 'protected',
+      is_active = false
+  where access_type = 'private';
+
+  alter table public.share_links
+  add constraint share_links_access_type_check
+  check (access_type in ('public', 'protected', 'specific_user'));
+end $$;
 
 alter table public.share_recipients
 add column if not exists can_view boolean default true;
@@ -208,6 +223,9 @@ for each row execute function public.classify_file_risk();
 drop trigger if exists touch_share_links_updated_at on public.share_links;
 create trigger touch_share_links_updated_at before update on public.share_links
 for each row execute function public.touch_updated_at();
+
+drop trigger if exists log_share_recipient_received_after_insert on public.share_recipients;
+drop function if exists public.log_share_recipient_received();
 
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = public as $$

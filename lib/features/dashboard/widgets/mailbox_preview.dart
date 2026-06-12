@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../auth/providers/auth_provider.dart';
+import '../../share/models/shared_item.dart';
 import '../../share/services/share_service.dart';
 
 class MailboxPreview extends StatelessWidget {
@@ -38,10 +39,10 @@ class MailboxPreview extends StatelessWidget {
             const SizedBox(height: 12),
             StreamBuilder(
               stream: userId == null || email == null
-                  ? Stream.value(demoSharedItems)
+                  ? Stream.value(<SharedItem>[])
                   : ShareService().watchMailbox(userId: userId, email: email),
               builder: (context, snapshot) {
-                final items = (snapshot.data ?? demoSharedItems)
+                final items = (snapshot.data ?? <SharedItem>[])
                     .take(4)
                     .toList();
                 if (items.isEmpty) {

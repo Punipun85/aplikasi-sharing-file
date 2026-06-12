@@ -183,7 +183,7 @@ class ShareService {
     required String email,
   }) async {
     if (!SupabaseConfig.isConfigured) {
-      return demoSharedItems;
+      return const [];
     }
     final rows = await _client
         .from('share_recipients')
@@ -200,7 +200,7 @@ class ShareService {
     required String email,
   }) {
     if (!SupabaseConfig.isConfigured) {
-      return Stream.value(demoSharedItems);
+      return Stream.value(const []);
     }
     return _client
         .from('share_recipients')

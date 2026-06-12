@@ -70,6 +70,33 @@ Setelah itu link yang digenerate akan berbentuk:
 https://your-secureshare-domain.com/share/TOKEN
 ```
 
+## Deploy ke Hosting Domainesia / cPanel
+
+Untuk hosting shared seperti Domainesia, Flutter Web dapat diupload sebagai static site.
+
+1. Build web dengan domain publik:
+
+```bash
+flutter build web --release --dart-define=APP_WEB_BASE_URL=https://domain-kamu.com
+```
+
+2. Buka File Manager cPanel/Domainesia.
+3. Masuk ke folder domain, biasanya `public_html` untuk domain utama atau folder addon/subdomain yang dipilih.
+4. Upload semua isi folder `build/web`, bukan folder `build/web`-nya.
+5. Pastikan file `index.html`, `main.dart.js`, `assets`, dan `.htaccess` ada langsung di folder domain.
+6. Buka `https://domain-kamu.com`.
+7. Test route langsung: `https://domain-kamu.com/share/contoh-token`.
+
+File `web/.htaccess` sudah disiapkan agar route Flutter seperti `/share/TOKEN`, `/login`, dan `/dashboard` tidak 404 saat dibuka langsung dari browser.
+
+Jika memakai subfolder, misalnya `https://domain-kamu.com/secureshare`, build dengan base href:
+
+```bash
+flutter build web --release --base-href /secureshare/ --dart-define=APP_WEB_BASE_URL=https://domain-kamu.com/secureshare
+```
+
+Lalu upload isi `build/web` ke folder `public_html/secureshare`.
+
 Untuk Android:
 
 ```bash

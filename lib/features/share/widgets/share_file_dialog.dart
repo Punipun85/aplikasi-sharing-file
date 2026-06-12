@@ -47,7 +47,6 @@ class _ShareFileDialogState extends State<ShareFileDialog> {
               items: const [
                 DropdownMenuItem(value: 'public', child: Text('Public')),
                 DropdownMenuItem(value: 'protected', child: Text('Protected')),
-                DropdownMenuItem(value: 'private', child: Text('Private')),
                 DropdownMenuItem(
                   value: 'specific_user',
                   child: Text('Specific user'),

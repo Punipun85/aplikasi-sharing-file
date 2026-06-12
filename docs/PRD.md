@@ -14,7 +14,7 @@ Target awal aplikasi adalah Android dan Web. Target lanjutan adalah iOS dan Desk
 
 1. Memudahkan user mengunggah dan menyimpan file secara online.
 2. Memungkinkan user berbagi file melalui link aman.
-3. Memberikan kontrol akses melalui public, protected, private, dan specific user.
+3. Memberikan kontrol akses melalui public, protected, dan specific user.
 4. Memberikan opsi expired link dalam menit, jam, dan hari.
 5. Membatasi izin penerima menjadi view only atau view and download.
 6. Menyimpan file secara terenkripsi sebelum masuk ke Supabase Storage.
@@ -87,7 +87,7 @@ Admin dapat melihat dashboard admin, users, audit metadata file terbatas, logs, 
 4. Storage used.
 5. Recent files.
 6. Recent activity realtime.
-7. Mailbox realtime untuk file yang dibagikan ke user.
+7. Mailbox realtime untuk file yang dikirim khusus ke user.
 
 ### 8.3 Upload File
 
@@ -123,7 +123,6 @@ User dapat membuat link dengan access type:
 | --- | --- |
 | public | User login dengan link bisa akses selama link aktif dan belum expired |
 | protected | User login dengan link bisa akses setelah password benar |
-| private | Hanya pemilik file yang bisa akses |
 | specific_user | Hanya user/email tertentu yang terdaftar sebagai penerima |
 
 Pengaturan share link:
@@ -173,10 +172,14 @@ Aktivitas yang dicatat:
 4. delete_file.
 5. create_share_link.
 6. update_share_link.
-7. download_file.
-8. wrong_password.
-9. expired_link_access.
-10. access_denied.
+7. open_share_link.
+8. view_file.
+9. download_file.
+10. wrong_password.
+11. expired_link_access.
+12. access_denied.
+
+Catatan: file yang diterima user tidak dicatat sebagai activity utama, tetapi muncul di Mailbox melalui data `share_recipients`.
 
 ### 8.10 Profile
 
@@ -234,11 +237,10 @@ Kolom penting untuk share link:
 6. Token share dibuat unik dan panjang.
 7. Password link disimpan dalam bentuk hash.
 8. Link expired ditolak oleh Edge Function.
-9. Private link hanya dapat diakses pemilik file.
-10. Specific user link hanya dapat diakses email/user penerima.
-11. Akses guest dihapus; halaman share membutuhkan login.
-12. Admin tidak membaca tabel `files` langsung. Admin memakai RPC audit yang hanya mengembalikan metadata aman.
-13. Admin tidak menerima `file_path`, `encryption_key`, `encryption_nonce`, atau `encryption_mac`.
+9. Specific user link hanya dapat diakses email/user penerima.
+10. Akses guest dihapus; halaman share membutuhkan login.
+11. Admin tidak membaca tabel `files` langsung. Admin memakai RPC audit yang hanya mengembalikan metadata aman.
+12. Admin tidak menerima `file_path`, `encryption_key`, `encryption_nonce`, atau `encryption_mac`.
 
 ## 11. Deteksi File Berbahaya Tanpa Membuka Data
 
@@ -285,12 +287,11 @@ Alur:
 7. Link expired tidak dapat digunakan setelah waktunya lewat.
 8. Public link dapat dibuka oleh user login yang punya link.
 9. Protected link meminta password.
-10. Private link hanya bisa dibuka pemilik file.
-11. Specific user link hanya bisa dibuka penerima.
-12. View only menonaktifkan tombol download.
-13. View and download mengaktifkan tombol lihat dan download.
-14. Activity log berjalan realtime.
-15. Admin dapat melihat users, audit metadata file, dan logs tanpa membuka data rahasia.
+10. Specific user link hanya bisa dibuka penerima.
+11. View only menonaktifkan tombol download.
+12. View and download mengaktifkan tombol lihat dan download.
+13. Mailbox mencatat file diterima, activity log mencatat open, view, dan download.
+14. Admin dapat melihat users, audit metadata file, dan logs tanpa membuka data rahasia.
 
 ## 14. Catatan Pengembangan Lanjutan
 

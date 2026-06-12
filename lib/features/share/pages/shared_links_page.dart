@@ -46,7 +46,7 @@ class _SharedLinksPageState extends State<SharedLinksPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Masukkan URL lengkap atau token link SecureShare untuk membuka file public, protected, private, atau specific user.',
+                      'Masukkan URL lengkap atau token link SecureShare untuk membuka file public, protected, atau specific user.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),

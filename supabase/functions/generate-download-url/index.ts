@@ -95,7 +95,10 @@ serve(async (req) => {
     encryption_algorithm: file.encryption_algorithm ?? null,
   };
 
-  if (action === 'metadata') return json(metadata);
+  if (action === 'metadata') {
+    await logActivity(supabase, user.id, link.file_id, 'open_share_link', 'success');
+    return json(metadata);
+  }
   if (action === 'view' && metadata.can_view === false) {
     return json({ error: 'View disabled' }, 403);
   }
@@ -121,6 +124,8 @@ serve(async (req) => {
       .update({ download_count: (file.download_count ?? 0) + 1 })
       .eq('id', link.file_id);
     await logActivity(supabase, user?.id ?? null, link.file_id, 'download_file', 'success');
+  } else if (action === 'view') {
+    await logActivity(supabase, user.id, link.file_id, 'view_file', 'success');
   }
 
   return json({
@@ -135,9 +140,6 @@ serve(async (req) => {
 async function validateAccess(supabase: ReturnType<typeof createClient>, link: any, file: any, user: any) {
   if (link.access_type === 'public' || link.access_type === 'protected') {
     return { ok: true };
-  }
-  if (link.access_type === 'private') {
-    return { ok: file.user_id === user?.id };
   }
   if (link.access_type === 'specific_user') {
     const { data: recipient } = await supabase
